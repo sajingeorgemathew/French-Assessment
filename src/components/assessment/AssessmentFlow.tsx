@@ -4,7 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import { AssessmentSteps } from "@/components/assessment/AssessmentSteps";
 import { StudentInformationForm } from "@/components/assessment/StudentInformationForm";
 import { AssessmentInstructions } from "@/components/assessment/AssessmentInstructions";
-import { AssessmentReady } from "@/components/assessment/AssessmentReady";
+import { AssessmentPlayer } from "@/components/assessment/player/AssessmentPlayer";
+import { PlayerShell } from "@/components/assessment/player/PlayerShell";
+import { PlayerUnavailable } from "@/components/assessment/player/PlayerStatus";
+import { GENERIC_ASSESSMENT_CONTENT_ERROR } from "@/lib/assessment-content";
 import {
   ASSESSMENT_LEVEL,
   ASSESSMENT_TITLE_FR,
@@ -16,6 +19,10 @@ import {
 } from "@/lib/student-information";
 import type { AssessmentSession } from "@/lib/assessment-session";
 
+/**
+ * Intro copy for the two entry steps. Step 2 is the assessment itself, which
+ * renders its own focused layout instead of this website style page.
+ */
 const stepIntro: Record<AssessmentStepIndex, string> = {
   0: "Tell us a little about yourself so we can share your outcome and suggest a French learning pathway.",
   1: "Read the instructions before you start the diagnostic.",
@@ -49,6 +56,25 @@ export function AssessmentFlow() {
     }
     stepRegion.current?.focus();
   }, [step]);
+
+  // The assessment takes over the page once it starts. It is deliberately not
+  // wrapped in the entry flow chrome: no marketing intro, no step rail, just
+  // the assessment.
+  if (step === 2) {
+    return session ? (
+      <AssessmentPlayer
+        attemptToken={session.attemptToken}
+        onExit={() => setStep(1)}
+      />
+    ) : (
+      <PlayerShell>
+        <PlayerUnavailable
+          message={GENERIC_ASSESSMENT_CONTENT_ERROR}
+          onBack={() => setStep(0)}
+        />
+      </PlayerShell>
+    );
+  }
 
   return (
     <div className="bg-academy-50">
@@ -96,8 +122,6 @@ export function AssessmentFlow() {
               }}
             />
           ) : null}
-
-          {step === 2 ? <AssessmentReady onBack={() => setStep(1)} /> : null}
         </div>
       </div>
     </div>
