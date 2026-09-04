@@ -14,6 +14,7 @@ import {
   emptyStudentInformation,
   type StudentInformation,
 } from "@/lib/student-information";
+import type { AssessmentSession } from "@/lib/assessment-session";
 
 const stepIntro: Record<AssessmentStepIndex, string> = {
   0: "Tell us a little about yourself so we can share your outcome and suggest a French learning pathway.",
@@ -23,14 +24,20 @@ const stepIntro: Record<AssessmentStepIndex, string> = {
 
 /**
  * Holds the entry flow state for the current page session. Student information
- * is kept here, not persisted, so moving back from the instructions step keeps
- * everything the student already entered.
+ * is kept here so moving back from the instructions step keeps everything the
+ * student already entered.
+ *
+ * The assessment session is the opaque attempt token returned by the server
+ * registration action. It is held in memory only and never placed in the URL.
+ * A hard browser refresh loses it and restarts the flow, which is a known
+ * FA-02 limitation documented for a later ticket.
  */
 export function AssessmentFlow() {
   const [step, setStep] = useState<AssessmentStepIndex>(0);
   const [student, setStudent] = useState<StudentInformation>(
     emptyStudentInformation,
   );
+  const [session, setSession] = useState<AssessmentSession | null>(null);
   const stepRegion = useRef<HTMLDivElement>(null);
   const isFirstRender = useRef(true);
 
@@ -71,15 +78,22 @@ export function AssessmentFlow() {
             <StudentInformationForm
               values={student}
               onChange={setStudent}
-              onContinue={() => setStep(1)}
+              onRegistered={(registered) => {
+                setSession(registered);
+                setStep(1);
+              }}
             />
           ) : null}
 
-          {step === 1 ? (
+          {step === 1 && session ? (
             <AssessmentInstructions
               studentName={student.fullName}
+              attemptToken={session.attemptToken}
               onBack={() => setStep(0)}
-              onBegin={() => setStep(2)}
+              onBegun={(started) => {
+                setSession(started);
+                setStep(2);
+              }}
             />
           ) : null}
 

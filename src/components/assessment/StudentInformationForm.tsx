@@ -3,7 +3,7 @@
 import { useId, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import Link from "next/link";
-import { ArrowRight, CircleAlert } from "lucide-react";
+import { ArrowRight, CircleAlert, LoaderCircle } from "lucide-react";
 import {
   FRENCH_LEVEL_OPTIONS,
   LEARNING_GOAL_OPTIONS,
@@ -12,10 +12,13 @@ import {
   type StudentInformation,
   type StudentInformationErrors,
 } from "@/lib/student-information";
+import { registerFrenchAssessmentStudent } from "@/lib/actions/assessment";
+import type { AssessmentSession } from "@/lib/assessment-session";
 import {
   primaryButtonClass,
   secondaryButtonClass,
 } from "@/components/ui/button-styles";
+import { InlineAlert } from "@/components/ui/InlineAlert";
 
 const fieldClass =
   "w-full rounded-md border border-academy-200 bg-white px-3 py-2.5 text-base text-slate-900 focus:border-academy-500";
@@ -64,13 +67,15 @@ function FieldShell({
 export function StudentInformationForm({
   values,
   onChange,
-  onContinue,
+  onRegistered,
 }: {
   values: StudentInformation;
   onChange: (values: StudentInformation) => void;
-  onContinue: () => void;
+  onRegistered: (session: AssessmentSession) => void;
 }) {
   const [errors, setErrors] = useState<StudentInformationErrors>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const prefix = useId();
 
   const fieldId = (name: keyof StudentInformation) => `${prefix}-${name}`;
@@ -88,26 +93,48 @@ export function StudentInformationForm({
   const controlClass = (name: keyof StudentInformation) =>
     errors[name] ? `${fieldClass} border-red-600` : fieldClass;
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const result = validateStudentInformation(values);
 
-    if (result.success && result.data) {
-      setErrors({});
-      onChange(result.data);
-      onContinue();
+    // Guard against a double submit from a fast second click or Enter press.
+    if (isSubmitting) {
       return;
     }
 
-    setErrors(result.errors);
+    const result = validateStudentInformation(values);
 
-    const firstInvalid = (
-      Object.keys(values) as (keyof StudentInformation)[]
-    ).find((name) => result.errors[name]);
+    if (!result.success || !result.data) {
+      setErrors(result.errors);
+      setSubmitError(null);
 
-    if (firstInvalid) {
-      document.getElementById(fieldId(firstInvalid))?.focus();
+      const firstInvalid = (
+        Object.keys(values) as (keyof StudentInformation)[]
+      ).find((name) => result.errors[name]);
+
+      if (firstInvalid) {
+        document.getElementById(fieldId(firstInvalid))?.focus();
+      }
+      return;
     }
+
+    const student = result.data;
+
+    setErrors({});
+    setSubmitError(null);
+    onChange(student);
+    setIsSubmitting(true);
+
+    // The student only moves on once the database holds the registered attempt.
+    const registration = await registerFrenchAssessmentStudent(student);
+
+    if (!registration.ok) {
+      // Entered values stay untouched so the student can simply try again.
+      setSubmitError(registration.message);
+      setIsSubmitting(false);
+      return;
+    }
+
+    onRegistered(registration.data);
   };
 
   return (
@@ -282,13 +309,32 @@ export function StudentInformationForm({
         </fieldset>
       </div>
 
+      {submitError ? <InlineAlert message={submitError} /> : null}
+
       <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
         <Link href="/" className={secondaryButtonClass}>
           Back to overview
         </Link>
-        <button type="submit" className={primaryButtonClass}>
-          Continue to Instructions
-          <ArrowRight className="h-5 w-5" aria-hidden="true" />
+        <button
+          type="submit"
+          disabled={isSubmitting}
+          aria-busy={isSubmitting}
+          className={primaryButtonClass}
+        >
+          {isSubmitting ? (
+            <>
+              Saving your details
+              <LoaderCircle
+                className="h-5 w-5 animate-spin"
+                aria-hidden="true"
+              />
+            </>
+          ) : (
+            <>
+              Continue to Instructions
+              <ArrowRight className="h-5 w-5" aria-hidden="true" />
+            </>
+          )}
         </button>
       </div>
     </form>

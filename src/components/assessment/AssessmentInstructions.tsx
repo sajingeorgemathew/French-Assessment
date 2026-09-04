@@ -1,4 +1,14 @@
-import { ArrowLeft, ArrowRight, BookMarked, BookOpen, PenLine } from "lucide-react";
+"use client";
+
+import { useState } from "react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  BookMarked,
+  BookOpen,
+  LoaderCircle,
+  PenLine,
+} from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
   ASSESSMENT_QUESTION_COUNT,
@@ -6,10 +16,13 @@ import {
   ASSESSMENT_TITLE_FR,
   type AssessmentSection,
 } from "@/lib/assessment";
+import { beginFrenchAssessment } from "@/lib/actions/assessment";
+import type { AssessmentSession } from "@/lib/assessment-session";
 import {
   primaryButtonClass,
   secondaryButtonClass,
 } from "@/components/ui/button-styles";
+import { InlineAlert } from "@/components/ui/InlineAlert";
 
 const sectionIcons: Record<AssessmentSection["id"], LucideIcon> = {
   grammar: PenLine,
@@ -25,15 +38,45 @@ const instructions = [
   "This is a diagnostic, not an exam. Answer with the French you already know.",
 ];
 
+/**
+ * By the time this step is visible the database already holds the student and a
+ * registered attempt. Begin Assessment only transitions that existing attempt,
+ * so it never creates a second one.
+ */
 export function AssessmentInstructions({
   studentName,
+  attemptToken,
   onBack,
-  onBegin,
+  onBegun,
 }: {
   studentName: string;
+  attemptToken: string;
   onBack: () => void;
-  onBegin: () => void;
+  onBegun: (session: AssessmentSession) => void;
 }) {
+  const [isBeginning, setIsBeginning] = useState(false);
+  const [beginError, setBeginError] = useState<string | null>(null);
+
+  const handleBegin = async () => {
+    // Guard against a repeated click while the transition is in flight.
+    if (isBeginning) {
+      return;
+    }
+
+    setBeginError(null);
+    setIsBeginning(true);
+
+    const result = await beginFrenchAssessment(attemptToken);
+
+    if (!result.ok) {
+      setBeginError(result.message);
+      setIsBeginning(false);
+      return;
+    }
+
+    onBegun(result.data);
+  };
+
   return (
     <div className="mt-6">
       <div className="rounded-lg border border-academy-100 bg-white p-6 sm:p-8">
@@ -89,14 +132,39 @@ export function AssessmentInstructions({
         </ul>
       </div>
 
+      {beginError ? <InlineAlert message={beginError} /> : null}
+
       <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <button type="button" onClick={onBack} className={secondaryButtonClass}>
+        <button
+          type="button"
+          onClick={onBack}
+          disabled={isBeginning}
+          className={secondaryButtonClass}
+        >
           <ArrowLeft className="h-5 w-5" aria-hidden="true" />
           Back
         </button>
-        <button type="button" onClick={onBegin} className={primaryButtonClass}>
-          Begin Assessment
-          <ArrowRight className="h-5 w-5" aria-hidden="true" />
+        <button
+          type="button"
+          onClick={handleBegin}
+          disabled={isBeginning}
+          aria-busy={isBeginning}
+          className={primaryButtonClass}
+        >
+          {isBeginning ? (
+            <>
+              Starting your assessment
+              <LoaderCircle
+                className="h-5 w-5 animate-spin"
+                aria-hidden="true"
+              />
+            </>
+          ) : (
+            <>
+              Begin Assessment
+              <ArrowRight className="h-5 w-5" aria-hidden="true" />
+            </>
+          )}
         </button>
       </div>
     </div>
