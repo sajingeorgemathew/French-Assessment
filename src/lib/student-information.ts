@@ -32,24 +32,46 @@ export const LEARNING_GOAL_OPTIONS = [
 /** Accepts common Canadian and international phone formats. */
 const phonePattern = /^[0-9+()\-.\s]+$/;
 
+/**
+ * Field limits shared by the browser form, the server action and the database
+ * check constraints, so an oversized payload is rejected at every layer.
+ */
+export const STUDENT_FIELD_LIMITS = {
+  fullName: 120,
+  email: 254,
+  phone: 40,
+  city: 120,
+} as const;
+
+/**
+ * The single source of truth for student intake rules. The browser form and the
+ * server action both parse with this schema, so server validation never depends
+ * on the browser having run first.
+ */
 export const studentInformationSchema = z.object({
   fullName: z
     .string()
     .trim()
     .min(1, "Full name is required.")
-    .min(2, "Please enter your full name."),
+    .min(2, "Please enter your full name.")
+    .max(STUDENT_FIELD_LIMITS.fullName, "Please shorten your full name."),
   email: z
     .string()
     .trim()
     .min(1, "Email address is required.")
+    .max(STUDENT_FIELD_LIMITS.email, "Please shorten your email address.")
     .pipe(z.email("Enter a valid email address, for example name@example.com.")),
   phone: z
     .string()
     .trim()
     .min(1, "Phone number is required.")
     .regex(phonePattern, "Enter a valid phone number.")
-    .min(7, "Enter a phone number with at least 7 digits."),
-  city: z.string().trim(),
+    .min(7, "Enter a phone number with at least 7 digits.")
+    .max(STUDENT_FIELD_LIMITS.phone, "Please shorten your phone number."),
+  city: z
+    .string()
+    .trim()
+    .max(STUDENT_FIELD_LIMITS.city, "Please shorten your city."),
   statusInCanada: z.enum(["", ...STATUS_IN_CANADA_OPTIONS]),
   frenchLevel: z.enum(["", ...FRENCH_LEVEL_OPTIONS]),
   learningGoal: z.enum(["", ...LEARNING_GOAL_OPTIONS]),
