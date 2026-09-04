@@ -26,7 +26,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           Skip to main content
         </a>
         <AcademyHeader />
-        <main id="main-content" className="flex-1">
+        {/* A column flex container so a page can opt into filling the
+            viewport with flex-1. Pages that do not stay content sized. */}
+        <main id="main-content" className="flex flex-1 flex-col">
           {children}
         </main>
         <AcademyFooter />

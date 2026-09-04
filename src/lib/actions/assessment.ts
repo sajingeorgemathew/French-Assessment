@@ -1,6 +1,12 @@
 "use server";
 
 import {
+  assessmentContentRpcResultSchema,
+  GENERIC_ASSESSMENT_CONTENT_ERROR,
+  toAssessmentContent,
+  type AssessmentContent,
+} from "@/lib/assessment-content";
+import {
   attemptTokenSchema,
   beginRpcResultSchema,
   GENERIC_ASSESSMENT_ERROR,
@@ -130,5 +136,52 @@ export async function beginFrenchAssessment(
   } catch {
     logFailure("begin", "unexpected server error");
     return failure();
+  }
+}
+
+/**
+ * Loads the French A1 assessment content for an attempt that is already
+ * in_progress.
+ *
+ * The RPC performs the real authorisation: it only returns content when the
+ * token matches an existing attempt, that attempt is in_progress, and the
+ * linked assessment is the active french-a1-diagnostic. It is read only, so
+ * calling it never changes status, started_at, submitted_at, score or
+ * percentage, and it returns no student information.
+ */
+export async function getFrenchAssessmentContent(
+  attemptToken: string,
+): Promise<AssessmentActionResult<AssessmentContent>> {
+  const parsedToken = attemptTokenSchema.safeParse(attemptToken);
+
+  if (!parsedToken.success) {
+    logFailure("content", "attempt token was not a uuid");
+    return failure(GENERIC_ASSESSMENT_CONTENT_ERROR);
+  }
+
+  try {
+    const supabase = getAssessmentSupabaseClient();
+
+    const { data, error } = await supabase.rpc(
+      "get_french_assessment_content",
+      { p_attempt_token: parsedToken.data },
+    );
+
+    if (error) {
+      logFailure("content", `rpc error code ${error.code ?? "unknown"}`);
+      return failure(GENERIC_ASSESSMENT_CONTENT_ERROR);
+    }
+
+    const result = assessmentContentRpcResultSchema.safeParse(data);
+
+    if (!result.success) {
+      logFailure("content", "unexpected rpc response shape");
+      return failure(GENERIC_ASSESSMENT_CONTENT_ERROR);
+    }
+
+    return { ok: true, data: toAssessmentContent(result.data) };
+  } catch {
+    logFailure("content", "unexpected server error");
+    return failure(GENERIC_ASSESSMENT_CONTENT_ERROR);
   }
 }
