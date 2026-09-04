@@ -1,26 +1,44 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/*
+  Toronto Academy of Education brand tokens.
+  Colours are sampled from the supplied brand assets in public/brand:
+  navy #1d3461, logo green #35b24a, sand #cbbea4.
+*/
+@theme {
+  --color-academy-50: #f3f6fb;
+  --color-academy-100: #e5ebf5;
+  --color-academy-200: #c9d5e8;
+  --color-academy-300: #9db1d2;
+  --color-academy-400: #5c78ac;
+  --color-academy-500: #2c4a80;
+  --color-academy-600: #1d3461;
+  --color-academy-700: #182b51;
+  --color-academy-800: #132140;
+  --color-academy-900: #0e1830;
+
+  --color-accent-50: #eef8f1;
+  --color-accent-100: #d7eede;
+  --color-accent-500: #35b24a;
+  --color-accent-600: #1f7f36;
+  --color-accent-700: #17632a;
+
+  --color-sand-100: #f5f1e8;
+  --color-sand-300: #cbbea4;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: #ffffff;
+  color: var(--color-slate-800);
+}
+
+/* Consistent, clearly visible keyboard focus across the application. */
+:focus-visible {
+  outline: 2px solid var(--color-academy-600);
+  outline-offset: 2px;
+  border-radius: 2px;
 }
