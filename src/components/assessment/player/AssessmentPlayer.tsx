@@ -8,15 +8,24 @@ import {
   PlayerUnavailable,
 } from "@/components/assessment/player/PlayerStatus";
 import { QuestionScreen } from "@/components/assessment/player/QuestionScreen";
+import { AssessmentResult } from "@/components/assessment/player/AssessmentResult";
 import { ReviewAnswers } from "@/components/assessment/player/ReviewAnswers";
 import { SectionIntroduction } from "@/components/assessment/player/SectionIntroduction";
-import { getFrenchAssessmentContent } from "@/lib/actions/assessment";
+import {
+  getFrenchAssessmentContent,
+  submitFrenchAssessment,
+} from "@/lib/actions/assessment";
 import {
   GENERIC_ASSESSMENT_CONTENT_ERROR,
   type AssessmentAnswers,
   type AssessmentContent,
   type AssessmentOptionKey,
 } from "@/lib/assessment-content";
+import {
+  GENERIC_ASSESSMENT_SUBMISSION_ERROR,
+  type AssessmentResultData,
+  type AssessmentSubmissionAnswers,
+} from "@/lib/assessment-result";
 import {
   buildPlayerPlan,
   stageAfterBack,
@@ -32,11 +41,15 @@ import {
  * token the student is already holding in memory. The token is never put in the
  * URL and no student information is involved.
  *
- * Selected answers live in this component and nowhere else. FA-03 does not
- * persist them, does not evaluate them and does not submit the attempt: the
- * attempt stays in_progress from Begin Assessment through the review screen.
- * A hard browser refresh therefore loses the current selections, which is a
- * documented FA-03 limitation that FA-04 resolves with real answer persistence.
+ * Selected answers live in this component until the student submits. They are
+ * not written to Supabase question by question, so a hard browser refresh
+ * before submission still loses the current selections. That is a documented
+ * FA-04 limitation, deliberately left to a later resume/recovery ticket.
+ *
+ * The final submission is the only write. It sends the opaque attempt token and
+ * a map of question id to A/B/C/D, and nothing else: no score, no percentage
+ * and no correctness. The database calculates and stores the result, and this
+ * component only renders what came back.
  */
 export function AssessmentPlayer({
   attemptToken,
@@ -62,7 +75,14 @@ export function AssessmentPlayer({
   );
   const [cameFromReview, setCameFromReview] = useState(false);
 
+  // Final submission state. `result` is the authoritative payload the database
+  // returned; once it is set the player is terminal and the questions are gone.
+  const [result, setResult] = useState<AssessmentResultData | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
   const stageRegion = useRef<HTMLDivElement>(null);
+  const resultRegion = useRef<HTMLDivElement>(null);
   const isFirstStage = useRef(true);
 
   // Retry clears the previous outcome itself, so this effect only ever settles
@@ -107,6 +127,14 @@ export function AssessmentPlayer({
     }
     stageRegion.current?.focus();
   }, [stage]);
+
+  // The result replaces the whole player rather than being another stage, so it
+  // takes focus on its own.
+  useEffect(() => {
+    if (result) {
+      resultRegion.current?.focus();
+    }
+  }, [result]);
 
   const plan = useMemo(
     () => (content ? buildPlayerPlan(content) : null),
@@ -157,6 +185,49 @@ export function AssessmentPlayer({
     [],
   );
 
+  /**
+   * Final submission.
+   *
+   * The payload is the answer map and nothing else. Unanswered questions are
+   * left out entirely: the database builds the complete twenty row snapshot
+   * itself, so the browser never states what an unanswered question is worth.
+   *
+   * A failure keeps every selection, keeps the student on Review Answers and
+   * shows the generic retryable message. A success is terminal, so
+   * `isSubmitting` is deliberately not cleared: the result screen replaces the
+   * review screen instead.
+   */
+  const handleSubmit = useCallback(async () => {
+    if (isSubmitting || result) {
+      return;
+    }
+
+    setSubmitError(null);
+    setIsSubmitting(true);
+
+    const payload: AssessmentSubmissionAnswers = {};
+    for (const [questionId, optionKey] of Object.entries(answers)) {
+      if (optionKey) {
+        payload[questionId] = optionKey;
+      }
+    }
+
+    try {
+      const outcome = await submitFrenchAssessment(attemptToken, payload);
+
+      if (outcome.ok) {
+        setResult(outcome.data);
+        return;
+      }
+
+      setSubmitError(outcome.message);
+    } catch {
+      setSubmitError(GENERIC_ASSESSMENT_SUBMISSION_ERROR);
+    }
+
+    setIsSubmitting(false);
+  }, [answers, attemptToken, isSubmitting, result]);
+
   if (loadError) {
     return (
       <PlayerShell>
@@ -173,6 +244,24 @@ export function AssessmentPlayer({
     return (
       <PlayerShell>
         <PlayerLoading />
+      </PlayerShell>
+    );
+  }
+
+  // A submitted attempt is final. The questions, the review screen, the
+  // progress bar and every navigation control are gone from here on, so there
+  // is no route back into editing, and the database would refuse a rescore in
+  // any case.
+  if (result) {
+    return (
+      <PlayerShell
+        title={content.assessment.title}
+        titleFr={content.assessment.titleFr}
+        subtitle={`${content.assessment.framework} Level ${content.assessment.level}`}
+      >
+        <div ref={resultRegion} tabIndex={-1} className="outline-none">
+          <AssessmentResult result={result} />
+        </div>
       </PlayerShell>
     );
   }
@@ -285,6 +374,9 @@ export function AssessmentPlayer({
               goTo({ kind: "question", questionIndex });
             }}
             onBack={handleBack}
+            onSubmit={handleSubmit}
+            isSubmitting={isSubmitting}
+            submitError={submitError}
           />
         ) : null}
       </div>

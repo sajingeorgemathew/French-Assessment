@@ -1,8 +1,12 @@
-import { ArrowLeft } from "lucide-react";
+"use client";
+
+import { useState } from "react";
+import { ArrowLeft, LoaderCircle, TriangleAlert } from "lucide-react";
 import {
   primaryButtonClass,
   secondaryButtonClass,
 } from "@/components/ui/button-styles";
+import { InlineAlert } from "@/components/ui/InlineAlert";
 import type {
   AssessmentAnswers,
   AssessmentContentQuestion,
@@ -14,8 +18,13 @@ import type { AnswerSummary } from "@/lib/assessment-player";
  *
  * It reports only what the student selected, never whether a selection is
  * right. There is no score, percentage, benchmark or pass/fail anywhere on this
- * screen, and reaching it does not submit anything: the attempt is still
- * in_progress. FA-04 turns the Submit Assessment button on.
+ * screen, because the browser holds no correct-answer information at all.
+ *
+ * Submit Assessment is a two step action. The first click opens an inline
+ * confirmation that explains the answers become final, and names the number of
+ * unanswered questions when there are any. Only the confirmation actually
+ * submits, so a single stray click while reviewing can never end the
+ * assessment.
  */
 export function ReviewAnswers({
   questions,
@@ -23,14 +32,36 @@ export function ReviewAnswers({
   summary,
   onSelectQuestion,
   onBack,
+  onSubmit,
+  isSubmitting,
+  submitError,
 }: {
   questions: AssessmentContentQuestion[];
   answers: AssessmentAnswers;
   summary: AnswerSummary;
   onSelectQuestion: (questionIndex: number) => void;
   onBack: () => void;
+  onSubmit: () => void;
+  isSubmitting: boolean;
+  submitError: string | null;
 }) {
+  const [isConfirming, setIsConfirming] = useState(false);
+
   const lastQuestionNumber = questions.at(-1)?.questionNumber;
+  const firstUnansweredIndex = questions.findIndex(
+    (question) => !answers[question.id],
+  );
+  const hasUnanswered = summary.unanswered > 0;
+
+  // "Review questions" goes straight to the first question still missing an
+  // answer when there is one, which is the reason the student opened the
+  // warning. Otherwise it simply closes the confirmation.
+  const handleReviewQuestions = () => {
+    setIsConfirming(false);
+    if (firstUnansweredIndex >= 0) {
+      onSelectQuestion(firstUnansweredIndex);
+    }
+  };
 
   return (
     <div className="mt-6">
@@ -76,13 +107,14 @@ export function ReviewAnswers({
                 <button
                   type="button"
                   onClick={() => onSelectQuestion(index)}
+                  disabled={isSubmitting}
                   aria-label={
                     selected
                       ? `Question ${question.questionNumber}, answered, option ${selected}. Go to this question.`
                       : `Question ${question.questionNumber}, not answered. Go to this question.`
                   }
                   className={[
-                    "flex w-full items-center gap-3 rounded-md border px-3 py-3 text-left transition-colors",
+                    "flex w-full items-center gap-3 rounded-md border px-3 py-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60",
                     selected
                       ? "border-academy-200 bg-white hover:bg-academy-50"
                       : "border-amber-200 bg-amber-50/60 hover:bg-amber-50",
@@ -119,20 +151,97 @@ export function ReviewAnswers({
         </ol>
       </div>
 
-      <p className="mt-6 rounded-md border border-academy-100 bg-white px-4 py-3 text-sm leading-6 text-slate-600">
-        Submission and scoring will be enabled in the next assessment step. Your
-        answers are held in this browser session only and have not been sent
-        anywhere.
-      </p>
+      {submitError ? <InlineAlert message={submitError} /> : null}
+
+      {isConfirming ? (
+        <div
+          role="group"
+          aria-label="Confirm final submission"
+          className="mt-6 rounded-lg border border-academy-200 bg-white p-5 sm:p-6"
+        >
+          <div className="flex gap-3">
+            {hasUnanswered ? (
+              <TriangleAlert
+                className="mt-1 h-5 w-5 shrink-0 text-amber-600"
+                aria-hidden="true"
+              />
+            ) : null}
+            <div className="min-w-0">
+              <h3 className="text-base font-semibold text-academy-700">
+                {hasUnanswered
+                  ? "Submit with unanswered questions?"
+                  : "Submit your assessment?"}
+              </h3>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+                {hasUnanswered
+                  ? `You have ${summary.unanswered} unanswered ${
+                      summary.unanswered === 1 ? "question" : "questions"
+                    }. You can return to complete them, or submit the assessment as it is. Unanswered questions are recorded as they stand.`
+                  : `You have answered all ${summary.total} questions.`}{" "}
+                Once you submit, your answers are final and cannot be changed.
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:items-center">
+            <button
+              type="button"
+              onClick={handleReviewQuestions}
+              disabled={isSubmitting}
+              className={secondaryButtonClass}
+            >
+              <ArrowLeft className="h-5 w-5" aria-hidden="true" />
+              Review Questions
+            </button>
+            <button
+              type="button"
+              onClick={onSubmit}
+              disabled={isSubmitting}
+              aria-busy={isSubmitting}
+              className={primaryButtonClass}
+            >
+              {isSubmitting ? (
+                <>
+                  Submitting assessment...
+                  <LoaderCircle
+                    className="h-5 w-5 animate-spin"
+                    aria-hidden="true"
+                  />
+                </>
+              ) : hasUnanswered ? (
+                "Submit Anyway"
+              ) : (
+                "Submit Assessment"
+              )}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <p className="mt-6 rounded-md border border-academy-100 bg-white px-4 py-3 text-sm leading-6 text-slate-600">
+          When you submit, your answers are sent to Toronto Academy of Education
+          and your assessment is marked complete. You will see your result on
+          the next screen.
+        </p>
+      )}
 
       <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <button type="button" onClick={onBack} className={secondaryButtonClass}>
+        <button
+          type="button"
+          onClick={onBack}
+          disabled={isSubmitting}
+          className={secondaryButtonClass}
+        >
           <ArrowLeft className="h-5 w-5" aria-hidden="true" />
           {lastQuestionNumber
             ? `Back to question ${lastQuestionNumber}`
             : "Back"}
         </button>
-        <button type="button" disabled className={primaryButtonClass}>
+        <button
+          type="button"
+          onClick={() => setIsConfirming(true)}
+          disabled={isConfirming || isSubmitting}
+          className={primaryButtonClass}
+        >
           Submit Assessment
         </button>
       </div>

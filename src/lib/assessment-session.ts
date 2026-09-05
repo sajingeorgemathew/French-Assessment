@@ -8,7 +8,11 @@ import { z } from "zod";
  * used to read any table directly.
  */
 
-/** Attempt statuses FA-02 can produce. 'submitted' arrives in a later ticket. */
+/**
+ * Attempt statuses the registration and begin RPCs can produce. The terminal
+ * 'submitted' status is only ever produced by the FA-04 scoring RPC, and is
+ * modelled by submissionRpcResultSchema in @/lib/assessment-result.
+ */
 export const ATTEMPT_STATUSES = ["registered", "in_progress"] as const;
 
 export type AttemptStatus = (typeof ATTEMPT_STATUSES)[number];
