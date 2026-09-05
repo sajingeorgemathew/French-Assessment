@@ -15,6 +15,14 @@ import {
   type AssessmentSession,
 } from "@/lib/assessment-session";
 import {
+  GENERIC_ASSESSMENT_SUBMISSION_ERROR,
+  submissionAnswersSchema,
+  submissionRpcResultSchema,
+  toAssessmentResult,
+  type AssessmentResultData,
+  type AssessmentSubmissionAnswers,
+} from "@/lib/assessment-result";
+import {
   studentInformationSchema,
   type StudentInformation,
 } from "@/lib/student-information";
@@ -23,9 +31,13 @@ import { getAssessmentSupabaseClient } from "@/lib/supabase/server";
 /**
  * Server boundary for the public French assessment flow.
  *
- * Both actions are reachable by direct POST, so each one revalidates its input
+ * Every action is reachable by direct POST, so each one revalidates its input
  * with the shared Zod schema before touching Supabase. Nothing here trusts the
  * browser, logs student PII, or returns a raw database error.
+ *
+ * No action in this module scores anything. Correct answers live only in
+ * private.assessment_answer_keys and are read only by the scoring RPC, so there
+ * is no answer key to import here and nothing to compare.
  */
 
 /** Logs a short, PII free marker so failures are diagnosable in server logs. */
@@ -183,5 +195,66 @@ export async function getFrenchAssessmentContent(
   } catch {
     logFailure("content", "unexpected server error");
     return failure(GENERIC_ASSESSMENT_CONTENT_ERROR);
+  }
+}
+
+/**
+ * Submits the student's final answers and returns the authoritative result.
+ *
+ * This action is a transport boundary, not a scoring boundary. It validates the
+ * attempt token and the answer map, hands them to
+ * public.submit_french_assessment, and validates what comes back. It never
+ * calculates a score or a percentage, never decides whether an answer is
+ * correct, never imports or reads an answer key, and never accepts a score,
+ * percentage or correctness flag from the browser: the only client supplied
+ * values that leave this function are the opaque token and a map of question id
+ * to A/B/C/D.
+ *
+ * The RPC is idempotent. Calling it again for an attempt that is already
+ * submitted returns the stored result and changes nothing.
+ */
+export async function submitFrenchAssessment(
+  attemptToken: string,
+  answers: AssessmentSubmissionAnswers,
+): Promise<AssessmentActionResult<AssessmentResultData>> {
+  const parsedToken = attemptTokenSchema.safeParse(attemptToken);
+
+  if (!parsedToken.success) {
+    logFailure("submission", "attempt token was not a uuid");
+    return failure(GENERIC_ASSESSMENT_SUBMISSION_ERROR);
+  }
+
+  const parsedAnswers = submissionAnswersSchema.safeParse(answers);
+
+  if (!parsedAnswers.success) {
+    logFailure("submission", "answer payload failed validation");
+    return failure(GENERIC_ASSESSMENT_SUBMISSION_ERROR);
+  }
+
+  try {
+    const supabase = getAssessmentSupabaseClient();
+
+    const { data, error } = await supabase.rpc("submit_french_assessment", {
+      p_attempt_token: parsedToken.data,
+      p_answers: parsedAnswers.data,
+    });
+
+    if (error) {
+      logFailure("submission", `rpc error code ${error.code ?? "unknown"}`);
+      return failure(GENERIC_ASSESSMENT_SUBMISSION_ERROR);
+    }
+
+    const result = submissionRpcResultSchema.safeParse(data);
+
+    if (!result.success) {
+      logFailure("submission", "unexpected rpc response shape");
+      return failure(GENERIC_ASSESSMENT_SUBMISSION_ERROR);
+    }
+
+    // Only the narrow, validated result leaves the server.
+    return { ok: true, data: toAssessmentResult(result.data) };
+  } catch {
+    logFailure("submission", "unexpected server error");
+    return failure(GENERIC_ASSESSMENT_SUBMISSION_ERROR);
   }
 }
