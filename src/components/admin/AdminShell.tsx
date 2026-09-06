@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { GraduationCap, LayoutDashboard, Users } from "lucide-react";
 
+import { AdminNavigation } from "@/components/admin/AdminNavigation";
 import { AdminSignOutButton } from "@/components/admin/AdminSignOutButton";
 import { ADMIN_DASHBOARD_PATH } from "@/lib/admin/admin-session";
 
@@ -14,14 +14,10 @@ import { ADMIN_DASHBOARD_PATH } from "@/lib/admin/admin-session";
  * is never rendered for a request that has not already passed
  * requireFrenchAssessmentAdmin().
  *
- * Students and Results are shown as disabled placeholders. FA-06 builds the
- * real pages; nothing here links to a route that does not exist.
+ * Navigation lives in AdminNavigation, which marks the current section. Every
+ * item there is a real route: FA-06 added Results, so there is no longer a
+ * disabled placeholder anywhere in this shell.
  */
-
-const upcomingNavigation = [
-  { label: "Students", icon: Users },
-  { label: "Results", icon: GraduationCap },
-] as const;
 
 export function AdminShell({
   email,
@@ -53,33 +49,7 @@ export function AdminShell({
             </p>
           </div>
 
-          <nav aria-label="Administration" className="lg:flex-1">
-            <ul className="flex flex-wrap gap-2 lg:block lg:space-y-1">
-              <li>
-                <Link
-                  href={ADMIN_DASHBOARD_PATH}
-                  aria-current="page"
-                  className="inline-flex w-full items-center gap-2 rounded-md bg-academy-600 px-3 py-2 text-sm font-semibold text-white"
-                >
-                  <LayoutDashboard className="h-4 w-4" aria-hidden="true" />
-                  Dashboard
-                </Link>
-              </li>
-              {upcomingNavigation.map((item) => (
-                <li key={item.label}>
-                  <span
-                    aria-disabled="true"
-                    title="Coming soon"
-                    className="inline-flex w-full cursor-not-allowed items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-slate-400"
-                  >
-                    <item.icon className="h-4 w-4" aria-hidden="true" />
-                    {item.label}
-                    <span className="ml-auto text-xs font-normal">Soon</span>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </nav>
+          <AdminNavigation />
 
           <div className="lg:mt-auto">
             {email ? (
