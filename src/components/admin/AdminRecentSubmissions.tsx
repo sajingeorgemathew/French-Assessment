@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Inbox } from "lucide-react";
 
 import {
@@ -7,16 +8,20 @@ import {
   formatAdminTimestamp,
   type AdminRecentSubmission,
 } from "@/lib/admin/admin-dashboard";
+import { buildAdminResultDetailHref } from "@/lib/admin/admin-results";
 
 /**
  * The ten most recent submitted assessments, newest first.
  *
- * Student names are plain text in FA-05. There is no detail route yet, so
- * nothing here is a link; FA-06 adds the attempt detail page and the per
- * question review that goes with it.
+ * Each student name links to the FA-06 review at /admin/results/[attemptId],
+ * addressed by the internal attempt UUID. assessment_attempts.attempt_token is
+ * the student's browser facing secret and never appears in an admin link.
  *
- * The rows carry no attempt token, no answer, no answer key and no per question
- * correctness. The RPC never selects those columns.
+ * The rows themselves carry no attempt token, no answer, no answer key and no
+ * per question correctness. The dashboard RPC never selects those columns; the
+ * per question review is loaded by the protected FA-06 detail RPC instead.
+ *
+ * Metric calculations and the layout are unchanged from FA-05.
  */
 
 const headerClass =
@@ -82,11 +87,14 @@ export function AdminRecentSubmissions({
             <tbody className="divide-y divide-academy-100">
               {submissions.map((submission) => (
                 <tr key={submission.attemptId}>
-                  <th
-                    scope="row"
-                    className={`${cellClass} text-left font-semibold text-academy-700`}
-                  >
-                    {submission.studentFullName}
+                  <th scope="row" className={`${cellClass} text-left`}>
+                    <Link
+                      href={buildAdminResultDetailHref(submission.attemptId)}
+                      aria-label={`View the assessment result for ${submission.studentFullName}`}
+                      className="font-semibold text-academy-700 underline underline-offset-2 hover:text-academy-600"
+                    >
+                      {submission.studentFullName}
+                    </Link>
                   </th>
                   <td className={cellClass}>{submission.studentEmail}</td>
                   <td className={cellClass}>
